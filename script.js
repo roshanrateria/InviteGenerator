@@ -6,9 +6,6 @@ const previewImage = document.getElementById('previewImage');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
-// Font matching Python's FONT_PATHS
-const FONTS = 'bold Arial, Arial Black, Impact, Calibri, sans-serif';
-
 generateBtn.addEventListener('click', generateCard);
 nameInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') generateCard();
@@ -39,10 +36,10 @@ async function generateCard() {
             ctx.drawImage(img, 0, 0);
             
             // Detect the white bar region
-            const rect = detectNameBar(canvas, img.width, img.height);
+            const rect = detectNameBar(img.width, img.height);
             
-            // Draw neon text
-            drawNeonText(teamName, rect, img.width, img.height);
+            // Draw neon text matching Python implementation
+            drawNeonText(teamName, rect);
             
             canvas.toBlob((blob) => {
                 const url = URL.createObjectURL(blob);
@@ -71,85 +68,133 @@ async function generateCard() {
     }
 }
 
-function detectNameBar(canvas, w, h) {
+function detectNameBar(w, h) {
     // Get image data to detect bright horizontal bar
     const imageData = ctx.getImageData(0, 0, w, h);
     const data = imageData.data;
     
-    // Find bright regions (similar to Python's threshold at 200)
     const brightThreshold = 200;
     const candidates = [];
     
-    // Scan for horizontal bright regions
-    for (let y = Math.floor(h * 0.35); y < Math.floor(h * 0.8); y++) {
-        let startX = -1;
-        let brightPixels = 0;
+    // Scan between 35% and 80% of height
+    const startY = Math.floor(h * 0.35);
+    const endY = Math.floor(h * 0.8);
+    
+    // Track contiguous bright regions
+    let inRegion = false;
+    let regionStartY = 0;
+    let regionMinX = w;
+    let regionMaxX = 0;
+    let regionHeight = 0;
+    
+    for (let y = startY; y < endY; y++) {
+        let rowMinX = w;
+        let rowMaxX = 0;
+        let brightCount = 0;
         
         for (let x = 0; x < w; x++) {
             const idx = (y * w + x) * 4;
             const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
             
             if (brightness > brightThreshold) {
-                if (startX === -1) startX = x;
-                brightPixels++;
+                brightCount++;
+                if (x < rowMinX) rowMinX = x;
+                if (x > rowMaxX) rowMaxX = x;
             }
         }
         
-        if (brightPixels > w * 0.3) { // At least 30% of width is bright
-            const rectW = brightPixels;
-            const rectH = Math.floor(h * 0.075);
+        // Check if this row has significant bright pixels
+        if (brightCount > w * 0.1) {
+            if (!inRegion) {
+                inRegion = true;
+                regionStartY = y;
+                regionMinX = rowMinX;
+                regionMaxX = rowMaxX;
+                regionHeight = 1;
+            } else {
+                regionHeight++;
+                if (rowMinX < regionMinX) regionMinX = rowMinX;
+                if (rowMaxX > regionMaxX) regionMaxX = rowMaxX;
+            }
+        } else if (inRegion) {
+            // End of region
+            const rectW = regionMaxX - regionMinX + 1;
+            const rectH = regionHeight;
             const area = rectW * rectH;
             const aspect = rectW / (rectH + 1);
             
             if (area > (w * h) * 0.001 && aspect > 4) {
                 candidates.push({
-                    x: startX,
-                    y: y,
+                    x: regionMinX,
+                    y: regionStartY,
                     width: rectW,
                     height: rectH,
                     area: area
                 });
-                break; // Found the bar
             }
+            
+            inRegion = false;
         }
     }
     
-    // Return detected bar or fallback
+    // Check if we ended in a region
+    if (inRegion) {
+        const rectW = regionMaxX - regionMinX + 1;
+        const rectH = regionHeight;
+        const area = rectW * rectH;
+        const aspect = rectW / (rectH + 1);
+        
+        if (area > (w * h) * 0.001 && aspect > 4) {
+            candidates.push({
+                x: regionMinX,
+                y: regionStartY,
+                width: rectW,
+                height: rectH,
+                area: area
+            });
+        }
+    }
+    
+    // Return the widest candidate
     if (candidates.length > 0) {
         return candidates.reduce((max, curr) => curr.width > max.width ? curr : max);
-    } else {
-        // Fallback values matching Python
-        return {
-            x: Math.floor((w - w * 0.7) / 2),
-            y: Math.floor(h * 0.55),
-            width: Math.floor(w * 0.7),
-            height: Math.floor(h * 0.075)
-        };
     }
+    
+    // Fallback
+    return {
+        x: Math.floor((w - w * 0.7) / 2),
+        y: Math.floor(h * 0.55),
+        width: Math.floor(w * 0.7),
+        height: Math.floor(h * 0.075)
+    };
 }
 
-function drawNeonText(text, rect, imgW, imgH) {
-    // Start with font size = rect.height * 1.1 (matching Python)
+function drawNeonText(text, rect) {
+    // Font matching Python's Arial Bold
+    const fontFamily = 'Arial, Arial Black, sans-serif';
+    
+    // Start with font size = rect.height * 1.1
     let testSize = Math.floor(rect.height * 1.1);
-    ctx.font = `${testSize}px ${FONTS}`;
+    ctx.font = `bold ${testSize}px ${fontFamily}`;
     
     let metrics = ctx.measureText(text);
     let textW = metrics.width;
-    let textH = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
     
-    // Reduce font size to fit 92% of bar width and 96% of bar height
+    // Reduce until text fits 92% of bar width and font size fits 96% of bar height
     while ((textW > rect.width * 0.92 || testSize > rect.height * 0.96) && testSize > 10) {
         testSize -= 2;
-        ctx.font = `${testSize}px ${FONTS}`;
+        ctx.font = `bold ${testSize}px ${fontFamily}`;
         metrics = ctx.measureText(text);
         textW = metrics.width;
-        textH = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
     }
     
-    // Calculate padding (0.5 * font size)
+    // Get text height from metrics
+    const textH = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+    
+    // Padding = 0.5 * font size
     const pad = Math.floor(testSize * 0.5);
-    const layerW = textW + pad * 2;
-    const layerH = textH + pad * 2;
+    const layerW = Math.floor(textW + pad * 2);
+    const layerH = Math.floor(textH + pad * 2);
     
     // Create temporary canvas for text layer
     const tempCanvas = document.createElement('canvas');
@@ -157,44 +202,47 @@ function drawNeonText(text, rect, imgW, imgH) {
     tempCanvas.height = layerH;
     const tempCtx = tempCanvas.getContext('2d');
     
-    // Text position within layer (compensate for bbox)
+    // Text position within layer
     const tx = pad;
     const ty = pad + metrics.actualBoundingBoxAscent;
     
-    tempCtx.font = `${testSize}px ${FONTS}`;
+    tempCtx.font = `bold ${testSize}px ${fontFamily}`;
     tempCtx.textBaseline = 'alphabetic';
     
-    // 1. Outer glow (cyan) - radius 12 + 6
+    // Layer 1: Outer glow (cyan) - simulating blur radius 12 + 6
     tempCtx.shadowColor = 'rgba(60, 220, 255, 1)';
-    tempCtx.shadowBlur = 24;
+    tempCtx.shadowBlur = 30;
     tempCtx.fillStyle = 'rgba(60, 220, 255, 0.8)';
     tempCtx.fillText(text, tx, ty);
     tempCtx.fillText(text, tx, ty);
     
-    // 2. Dark stroke for contrast
-    tempCtx.shadowBlur = 3;
-    tempCtx.shadowColor = 'rgba(2, 2, 6, 1)';
-    tempCtx.strokeStyle = 'rgba(2, 2, 6, 1)';
-    tempCtx.lineWidth = Math.max(2, testSize * 0.04);
-    tempCtx.strokeText(text, tx, ty);
-    tempCtx.strokeText(text, tx - 1, ty);
-    tempCtx.strokeText(text, tx + 1, ty);
-    tempCtx.strokeText(text, tx, ty - 1);
-    tempCtx.strokeText(text, tx, ty + 1);
+    // Layer 2: Inner glow
+    tempCtx.shadowBlur = 15;
+    tempCtx.fillStyle = 'rgba(60, 220, 255, 0.6)';
+    tempCtx.fillText(text, tx, ty);
     
-    // 3. Horizontal gradient fill (cyan → magenta)
+    // Layer 3: Dark stroke for contrast (multiple passes)
     tempCtx.shadowBlur = 0;
+    tempCtx.shadowColor = 'transparent';
+    tempCtx.strokeStyle = 'rgba(2, 2, 6, 1)';
+    tempCtx.lineWidth = Math.max(3, testSize * 0.05);
+    
+    const offsets = [[-2, 0], [2, 0], [0, -2], [0, 2], [-1, -1], [1, 1]];
+    for (const [ox, oy] of offsets) {
+        tempCtx.strokeText(text, tx + ox, ty + oy);
+    }
+    
+    // Layer 4: Horizontal gradient (cyan → magenta)
     const gradient = tempCtx.createLinearGradient(tx, ty, tx + textW, ty);
-    // Matching Python: r: 10→200, g: 200→30, b: 255
-    gradient.addColorStop(0, 'rgb(10, 200, 255)');    // cyan
-    gradient.addColorStop(1, 'rgb(200, 30, 255)');    // magenta
+    gradient.addColorStop(0, 'rgb(10, 200, 255)');   // cyan
+    gradient.addColorStop(1, 'rgb(200, 30, 255)');   // magenta
     tempCtx.fillStyle = gradient;
     tempCtx.fillText(text, tx, ty);
     
-    // 4. Bright inner highlight
-    tempCtx.shadowBlur = 2;
+    // Layer 5: Bright inner highlight
+    tempCtx.shadowBlur = 3;
     tempCtx.shadowColor = 'rgba(255, 255, 255, 0.8)';
-    tempCtx.fillStyle = 'rgba(240, 250, 255, 0.78)'; // 200/255 ≈ 0.78
+    tempCtx.fillStyle = 'rgba(240, 250, 255, 0.78)';
     tempCtx.fillText(text, tx, ty);
     
     // Calculate paste position (center the layer in the rect)
