@@ -157,16 +157,20 @@ function detectNameBar(w, h) {
     
     // Return the widest candidate
     if (candidates.length > 0) {
-        return candidates.reduce((max, curr) => curr.width > max.width ? curr : max);
+        const best = candidates.reduce((max, curr) => curr.width > max.width ? curr : max);
+        console.log('Detected bar:', best);
+        return best;
     }
     
     // Fallback
-    return {
+    const fallback = {
         x: Math.floor((w - w * 0.7) / 2),
         y: Math.floor(h * 0.55),
         width: Math.floor(w * 0.7),
         height: Math.floor(h * 0.075)
     };
+    console.log('Using fallback:', fallback);
+    return fallback;
 }
 
 function drawNeonText(text, rect) {
@@ -175,26 +179,37 @@ function drawNeonText(text, rect) {
     
     // Start with font size = rect.height * 1.1
     let testSize = Math.floor(rect.height * 1.1);
-    ctx.font = `bold ${testSize}px ${fontFamily}`;
     
-    let metrics = ctx.measureText(text);
+    // Create a temporary context for measuring (matching Python's textbbox)
+    const measureCanvas = document.createElement('canvas');
+    const measureCtx = measureCanvas.getContext('2d');
+    measureCtx.font = `bold ${testSize}px ${fontFamily}`;
+    
+    let metrics = measureCtx.measureText(text);
     let textW = metrics.width;
+    // Python's bbox height = bbox[3] - bbox[1]
+    let textH = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
     
-    // Reduce until text fits 92% of bar width and font size fits 96% of bar height
-    while ((textW > rect.width * 0.92 || testSize > rect.height * 0.96) && testSize > 10) {
+    console.log(`Initial: fontSize=${testSize}, textW=${textW}, textH=${textH}`);
+    
+    // Reduce until text fits 92% of bar width and 96% of bar height
+    while ((textW > rect.width * 0.92 || textH > rect.height * 0.96) && testSize > 10) {
         testSize -= 2;
-        ctx.font = `bold ${testSize}px ${fontFamily}`;
-        metrics = ctx.measureText(text);
+        measureCtx.font = `bold ${testSize}px ${fontFamily}`;
+        metrics = measureCtx.measureText(text);
         textW = metrics.width;
+        textH = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
     }
     
-    // Get text height from metrics
-    const textH = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+    console.log(`Final: fontSize=${testSize}, textW=${textW}, textH=${textH}`);
+    console.log(`Metrics: ascent=${metrics.actualBoundingBoxAscent}, descent=${metrics.actualBoundingBoxDescent}`);
     
     // Padding = 0.5 * font size
     const pad = Math.floor(testSize * 0.5);
     const layerW = Math.floor(textW + pad * 2);
     const layerH = Math.floor(textH + pad * 2);
+    
+    console.log(`Padding=${pad}, Layer: ${layerW}x${layerH}`);
     
     // Create temporary canvas for text layer
     const tempCanvas = document.createElement('canvas');
@@ -203,8 +218,13 @@ function drawNeonText(text, rect) {
     const tempCtx = tempCanvas.getContext('2d');
     
     // Text position within layer
+    // Python: tx = pad, ty = pad - bbox[1]
+    // bbox[1] is the top of the bounding box (negative for ascenders)
+    // In canvas, actualBoundingBoxAscent is the distance from baseline to top
     const tx = pad;
     const ty = pad + metrics.actualBoundingBoxAscent;
+    
+    console.log(`Text position in layer: tx=${tx}, ty=${ty}`);
     
     tempCtx.font = `bold ${testSize}px ${fontFamily}`;
     tempCtx.textBaseline = 'alphabetic';
@@ -248,6 +268,9 @@ function drawNeonText(text, rect) {
     // Calculate paste position (center the layer in the rect)
     const pasteX = Math.floor(rect.x + (rect.width - layerW) / 2);
     const pasteY = Math.floor(rect.y + (rect.height - layerH) / 2);
+    
+    console.log(`Paste position: x=${pasteX}, y=${pasteY}`);
+    console.log(`Text will appear at: x=${pasteX + tx}, y=${pasteY + ty}`);
     
     // Composite onto main canvas
     ctx.drawImage(tempCanvas, pasteX, pasteY);
