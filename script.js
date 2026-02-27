@@ -6,6 +6,15 @@ const previewImage = document.getElementById('previewImage');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
+const CAPTION = `Stepping into the future with Prompt Pulse at INNOVACION 2026! 🚀✨ Super excited to battle it out at the ultimate AI & Prompt Engineering Hackathon. Let's see what the AI gods have in store! 🧠⚡️
+
+Think you have what it takes to out-prompt me? 😏 Join the arena before registrations close! 
+
+🔗 Event registration: https://forms.gle/WxZaiQ9fGhuvWEg38
+🔗 Central Registration: https://forms.gle/invN5uaJfPM9d7h87
+
+@ieminnovacion #PromptPulse #Innovacion2026 #PromptEngineering #AIHackathon`;
+
 generateBtn.addEventListener('click', generateCard);
 nameInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') generateCard();
@@ -48,6 +57,9 @@ async function generateCard() {
                 a.download = `card_${teamName.replace(/\s+/g, '_')}_${Date.now()}.jpg`;
                 a.click();
                 URL.revokeObjectURL(url);
+                
+                // Copy caption to clipboard
+                copyToClipboard(CAPTION);
                 
                 showStatus('Card created successfully!', 'success');
                 generateBtn.disabled = false;
@@ -301,5 +313,37 @@ function showStatus(message, type) {
         setTimeout(() => {
             statusMessage.classList.add('hidden');
         }, 3000);
+    }
+}
+
+async function copyToClipboard(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        
+        // Show caption copied notification
+        const captionNotif = document.createElement('div');
+        captionNotif.className = 'caption-notification';
+        captionNotif.innerHTML = `
+            <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                <path d="M9 14l2 2 4-4"></path>
+            </svg>
+            <span>Caption copied to clipboard!</span>
+        `;
+        document.body.appendChild(captionNotif);
+        
+        // Trigger animation
+        setTimeout(() => captionNotif.classList.add('show'), 10);
+        
+        // Remove after 3 seconds
+        setTimeout(() => {
+            captionNotif.classList.remove('show');
+            setTimeout(() => captionNotif.remove(), 300);
+        }, 3000);
+        
+        console.log('Caption copied to clipboard');
+    } catch (err) {
+        console.error('Failed to copy caption:', err);
     }
 }

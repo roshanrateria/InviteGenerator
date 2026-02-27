@@ -245,3 +245,46 @@ body {
         max-width: 100%;
     }
 }
+
+/* Caption notification */
+.caption-notification {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    background: linear-gradient(135deg, rgba(10, 202, 255, 0.95) 0%, rgba(138, 43, 226, 0.95) 100%);
+    color: white;
+    padding: 16px 24px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 8px 32px rgba(10, 202, 255, 0.4),
+                0 8px 32px rgba(138, 43, 226, 0.3);
+    font-size: 1rem;
+    font-weight: 500;
+    z-index: 1000;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.caption-notification.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.caption-notification .copy-icon {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+    .caption-notification {
+        bottom: 20px;
+        right: 20px;
+        left: 20px;
+        font-size: 0.9rem;
+        padding: 14px 20px;
+    }
+}
